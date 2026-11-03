@@ -1,8 +1,7 @@
 export function getApiBase() {
   const custom = localStorage.getItem('volp_custom_backend_url');
-  const rawUrl = (custom && custom.trim()) || import.meta.env.VITE_API_BASE_URL || '';
+  const rawUrl = (custom && custom.trim()) || import.meta.env?.VITE_API_BASE_URL || '';
   let clean = rawUrl.trim().replace(/\/+$/, '');
-  // Normalize base so it does not contain a trailing /api (we explicitly include /api in endpoints)
   clean = clean.replace(/\/api$/, '');
   return clean;
 }
@@ -29,6 +28,16 @@ export function getTargetHost() {
     }
   }
   return 'localhost:3000';
+}
+
+function getAuthHeaders() {
+  try {
+    const raw = localStorage.getItem('volp_user');
+    const u = raw ? JSON.parse(raw) : null;
+    return u?.token ? { 'Authorization': `Bearer ${u.token}` } : {};
+  } catch {
+    return {};
+  }
 }
 
 export async function checkBackendConnection() {
@@ -174,7 +183,11 @@ export async function getCourses(userEmail) {
     if (!userEmail) {
       return { success: false, data: [] };
     }
-    const res = await fetch(`${apiBase}/api/fetch/courses?email=${encodeURIComponent(userEmail)}`);
+    const res = await fetch(`${apiBase}/api/fetch/courses?email=${encodeURIComponent(userEmail)}`, {
+      headers: {
+        ...getAuthHeaders()
+      }
+    });
     if (res.ok) {
       const data = await res.json();
       const rawCourses = data.courses || (Array.isArray(data) ? data : []);
@@ -195,7 +208,11 @@ export async function getAssignments(userEmail, courseId) {
     }
     let url = `${apiBase}/api/fetch/assignments?email=${encodeURIComponent(userEmail)}`;
     if (courseId) url += `&courseId=${encodeURIComponent(courseId)}`;
-    const res = await fetch(url);
+    const res = await fetch(url, {
+      headers: {
+        ...getAuthHeaders()
+      }
+    });
     if (res.ok) {
       const data = await res.json();
       const rawAssignments = data.assignments || (Array.isArray(data) ? data : []);
