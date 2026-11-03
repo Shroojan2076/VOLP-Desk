@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
           message: res.message
         });
       });
-    }, 15000);
+    }, 60000); 
 
     return () => {
       active = false;
