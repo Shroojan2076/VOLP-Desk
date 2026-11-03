@@ -17,44 +17,34 @@ export function parseVOLPDateTime(datetime) {
         !Number.isInteger(month) ||
         !Number.isInteger(year) ||
         !Number.isInteger(hours) ||
-        !Number.isInteger(minutes)
+        !Number.isInteger(minutes) ||
+        day < 1 || day > 31 ||
+        month < 1 || month > 12 ||
+        hours < 1 || hours > 12 ||
+        minutes < 0 || minutes > 59
     ) {
         throw new Error(`Invalid VOLP date: ${datetime}`);
     }
 
-    if (hours >= 0 && hours <= 23) {
-    } else if (period === "AM") {
-        if (hours === 12) {
-            hours = 0;
-    }
-    } else if (period === "PM") {
-        if (hours !== 12) {
-            hours += 12;
-        }
-    } else {
+    const upperPeriod = period.toUpperCase();
+    if (upperPeriod !== "AM" && upperPeriod !== "PM") {
         throw new Error(`Invalid AM/PM value: ${period}`);
     }
 
-    const new_date = new Date(
-        year, 
-        month-1,
-        day,
-        hours,
-        minutes,
-        0,
-        0
-    )
+    let h24 = hours % 12;
+    if (upperPeriod === "PM") {
+        h24 += 12;
+    }
 
-    if (
-        new_date.getFullYear() !== year ||
-        new_date.getMonth() !== month - 1 ||
-        new_date.getDate() !== day ||
-        new_date.getHours() !== hours ||
-        new_date.getMinutes() !== minutes
-    ) {
+    // Construct ISO string with explicit Indian Standard Time (+05:30) offset
+    // so it is parsed deterministically into UTC across all server environments
+    const pad = (n) => String(n).padStart(2, "0");
+    const isoString = `${year}-${pad(month)}-${pad(day)}T${pad(h24)}:${pad(minutes)}:00+05:30`;
+    const new_date = new Date(isoString);
+
+    if (isNaN(new_date.getTime())) {
         throw new Error(`Invalid date: ${datetime}`);
     }
 
     return new_date;
 }
-

@@ -1,29 +1,46 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import { fetchCourses, fetchAssignments, fetchUser } from "../../db/fetchFromDatabase.js";
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "volp-default-session-secret-key-prod";
 
-router.get("/courses", async (req, res) => {
+function authenticateUser(req, res, next) {
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+
+    if (!token) {
+        return res.status(401).json({
+            success: false,
+            message: "Unauthorized: Authentication token is required."
+        });
+    }
+
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET);
+        req.user = decoded;
+        next();
+    } catch (err) {
+        return res.status(403).json({
+            success: false,
+            message: "Forbidden: Invalid or expired authentication token."
+        });
+    }
+}
+
+router.get("/courses", authenticateUser, async (req, res) => {
     try {
         const userEmail = req.query.email;
 
-        if (!userEmail) {
-            return res.status(400).json({
+        // IDOR protection: ensure the authenticated user can only view their own courses
+        if (userEmail && userEmail.toLowerCase() !== req.user.email.toLowerCase()) {
+            return res.status(403).json({
                 success: false,
-                message: "The 'email' query parameter is required."
+                message: "Access forbidden: you cannot access another student's courses."
             });
         }
 
-        const user = await fetchUser(userEmail);
-
-        if (user.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found."
-            });
-        }
-
-        const courses = await fetchCourses(user[0].id);
+        const courses = await fetchCourses(req.user.id);
         res.status(200).json({ 
             success: true, 
             courses 
@@ -37,28 +54,20 @@ router.get("/courses", async (req, res) => {
     }
 });
 
-router.get("/assignments", async (req, res) => {
+router.get("/assignments", authenticateUser, async (req, res) => {
     try {
         const userEmail = req.query.email;
         const userCourseId = req.query.courseId;
 
-        if (!userEmail) {
-            return res.status(400).json({
+        // IDOR protection: ensure the authenticated user can only view their own assignments
+        if (userEmail && userEmail.toLowerCase() !== req.user.email.toLowerCase()) {
+            return res.status(403).json({
                 success: false,
-                message: "The 'email' query parameter is required."
+                message: "Access forbidden: you cannot access another student's assignments."
             });
         }
 
-        const user = await fetchUser(userEmail);
-
-        if (user.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found."
-            });
-        }
-
-        const assignments = await fetchAssignments(user[0].id, userCourseId);
+        const assignments = await fetchAssignments(req.user.id, userCourseId);
         res.status(200).json({ 
             success: true, 
             assignments 
@@ -71,6 +80,5 @@ router.get("/assignments", async (req, res) => {
         });
     }
 });
-
 
 export default router;

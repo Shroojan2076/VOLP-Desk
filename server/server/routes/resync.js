@@ -16,7 +16,9 @@ function isVolpAvailable() {
 
 router.get("/", (req, res) => {
     const clientSecret = req.headers["x-cron-secret"] || req.query.secret;
-    if (clientSecret !== process.env.CRON_SECRET) {
+    const expectedSecret = process.env.CRON_SECRET;
+
+    if (!expectedSecret || !clientSecret || clientSecret !== expectedSecret) {
         return res.status(401).json({ error: "Unauthorized cron trigger." });
     }
 
@@ -56,8 +58,7 @@ router.get("/", (req, res) => {
         .finally(() => {
             isSyncInProgress = false;
         });
-    })
+    });
 });
 
 export default router;
-

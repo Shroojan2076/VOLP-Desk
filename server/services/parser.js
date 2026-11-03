@@ -1,18 +1,23 @@
 import { parseVOLPDateTime } from './date.js';
 
 export function parseAssignments(assignments, crsId, userId) {
+    if (!Array.isArray(assignments)) {
+        console.warn(`parseAssignments: Expected array but received ${typeof assignments} for course ${crsId}, user ${userId}`);
+        return [];
+    }
+
     const data = assignments.map(item => ({
         userId: userId,
         assignmentId: item.ass_id,
         courseId: crsId,
         marks: Number(item.weightage),
-        submitted: item.issubmitted,
+        submitted: Boolean(item.issubmitted),
         question: item.question,
         dueDate: parseVOLPDateTime(item.due_date),
         graceDate: parseVOLPDateTime(item.grace_date),
-        graded: item.graded,
-        evaluated: item.isevaluated,
-        score: item.obtained_marks ?? null,
+        graded: Boolean(item.graded),
+        evaluated: Boolean(item.isevaluated),
+        score: item.obtained_marks != null ? Number(item.obtained_marks) : null,
         submissionFile: item.submitted_answer_file_name ?? null,
         submissionPath: item.submitted_answer_file_path ?? null,
     }));
@@ -23,6 +28,11 @@ export function parseAssignments(assignments, crsId, userId) {
 }
 
 export function parseCourses(courses, userId) {
+    if (!Array.isArray(courses)) {
+        console.warn(`parseCourses: Expected array but received ${typeof courses} for user ${userId}`);
+        return [];
+    }
+
     const data = courses.map(item => ({
         userId: userId,
         courseId: item.crsid,
@@ -32,7 +42,7 @@ export function parseCourses(courses, userId) {
         description: item.description,
         professor: item.inst,
         lastSeen: item.lastseen,
-        progress: Number(item.progress),
+        progress: Number(item.progress || 0),
         active: Boolean(item.course_status),
         allowAssessment: Boolean(item.allow_assessment),
         archived: Boolean(item.is_archived)
@@ -44,6 +54,11 @@ export function parseCourses(courses, userId) {
 }
 
 export function parseUsers(users) {
+    if (!Array.isArray(users)) {
+        console.warn(`parseUsers: Expected array but received ${typeof users}`);
+        return [];
+    }
+
     const data = users.map(item => ({
         id: item.id,
         email: item.email,
@@ -59,14 +74,3 @@ export function parseUsers(users) {
 
     return data;
 }
-
-// const auth = await login();
-// const resp = await getCourses(auth);
-// const rawAssignments = await getAssignmentList(resp[0], auth);
-
-// const assignments = parseAssignments(rawAssignments, 15917);
-
-// console.log(assignments[0]);
-
-// console.log(assignments[0].dueDate instanceof Date);
-// console.log(assignments[0].dueDate.toString());

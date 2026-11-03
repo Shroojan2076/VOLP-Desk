@@ -4,9 +4,13 @@ import { sendUserReminder } from "../../services/mailer.js";
 
 const router = express.Router();
 
+let isNotificationInProgress = false;
+
 router.get("/deadlines", async (req, res) => {
     const clientSecret = req.headers["x-cron-secret"] || req.query.secret;
-    if (clientSecret !== process.env.CRON_SECRET) {
+    const expectedSecret = process.env.CRON_SECRET;
+
+    if (!expectedSecret || !clientSecret || clientSecret !== expectedSecret) {
         return res.status(401).json({
             error: "Unauthorized trigger."
         });
@@ -18,6 +22,17 @@ router.get("/deadlines", async (req, res) => {
             error: "SMTP credentials (SMTP_USER and SMTP_PASS) are not configured in environment variables."
         });
     }
+
+    if (isNotificationInProgress) {
+        console.log("[Deadline Alerts] Notification dispatch already in progress. Skipping duplicate trigger.");
+        return res.status(200).json({
+            success: true,
+            status: "already_running",
+            message: "Deadline notification dispatch is already in progress."
+        });
+    }
+
+    isNotificationInProgress = true;
 
     try {
         const rows = await fetchUpcomingDeadlines(3);
@@ -62,8 +77,9 @@ router.get("/deadlines", async (req, res) => {
     } catch (error) {
         console.error("Failed to process deadline notifications:", error);
         return res.status(500).json({ success: false, error: error.message });
+    } finally {
+        isNotificationInProgress = false;
     }
-})
-
+});
 
 export default router;

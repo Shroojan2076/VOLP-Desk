@@ -165,3 +165,35 @@ export async function saveUser(user) {
         throw error;
     }
 }
+
+
+export async function recordAuthFailure(userId, errorMessage) {
+    const query = `
+        UPDATE users 
+        SET auth_failure_count = auth_failure_count + 1,
+            auth_error_message = $2,
+            is_active = CASE WHEN auth_failure_count + 1 >= 3 THEN FALSE ELSE is_active END,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1;
+    `;
+    try {
+        await pool.query(query, [userId, errorMessage]);
+    } catch (error) {
+        console.error(`Failed to record auth failure for user_id ${userId}:`, error.message);
+    }
+}
+
+export async function resetAuthFailure(userId) {
+    const query = `
+        UPDATE users 
+        SET auth_failure_count = 0,
+            auth_error_message = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1;
+    `;
+    try {
+        await pool.query(query, [userId]);
+    } catch (error) {
+        console.error(`Failed to reset auth failure for user_id ${userId}:`, error.message);
+    }
+}

@@ -9,6 +9,8 @@ export async function createUsersTable() {
       first_name VARCHAR(100),
       last_name VARCHAR(100),
       is_active BOOLEAN DEFAULT TRUE,
+      auth_failure_count INT DEFAULT 0,
+      auth_error_message TEXT DEFAULT NULL,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
@@ -16,6 +18,13 @@ export async function createUsersTable() {
   try {
     console.log('Verifying or creating "users" table...');
     await pool.query(createTableQuery);
+
+    // Apply migrations if users table was created previously without these columns
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_failure_count INT DEFAULT 0;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_error_message TEXT DEFAULT NULL;
+    `);
+
     console.log('"users" table created or verified successfully.');
   } catch (error) {
     console.error('Failed to create users table:', error.message);
@@ -103,14 +112,30 @@ export async function createAssignmentsTable() {
   }
 }
 
+export async function createIndexes() {
+  try {
+    console.log('Verifying or creating query performance indexes...');
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_assignments_pending_deadlines 
+      ON assignments (due_date ASC) 
+      WHERE submitted = FALSE;
+
+      CREATE INDEX IF NOT EXISTS idx_assignments_user_course 
+      ON assignments (user_id, course_id);
+    `);
+    console.log('Performance indexes created or verified successfully.');
+  } catch (error) {
+    console.error('Failed to create indexes:', error.message);
+    throw error;
+  }
+}
+
 async function runDatabaseSetup() {
   try {
     await createUsersTable();
-    
     await createCoursesTables();
-    
     await createAssignmentsTable();
-    
+    await createIndexes();
     console.log('Complete relational schema initialization successful.');
   } catch (err) {
     console.error('Database setup encountered an error:', err.message);
@@ -120,4 +145,12 @@ async function runDatabaseSetup() {
   }
 }
 
-runDatabaseSetup();
+// Only auto-run if executed directly as a script (node db/createDatabase.js)
+const isDirectRun = process.argv[1] && (
+  process.argv[1].endsWith("createDatabase.js") ||
+  process.argv[1].includes("createDatabase")
+);
+
+if (isDirectRun) {
+  runDatabaseSetup();
+}

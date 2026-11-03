@@ -3,26 +3,34 @@ import { config } from "dotenv";
 
 config();
 
-const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-const smtpPort = Number(process.env.SMTP_PORT) || 2525;
+let transporter = null;
 
-if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    throw new Error("Missing SMTP_USER or SMTP_PASS environment variable");
+function getTransporter() {
+    if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+        throw new Error("Missing SMTP_USER or SMTP_PASS environment variable");
+    }
+
+    if (!transporter) {
+        const smtpHost = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+        const smtpPort = Number(process.env.SMTP_PORT) || 2525;
+
+        transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpPort === 465,
+            requireTLS: smtpPort !== 465,
+            auth: {
+                user: process.env.SMTP_USER,
+                pass: process.env.SMTP_PASS,
+            },
+            connectionTimeout: 20000,
+            greetingTimeout: 20000,
+            socketTimeout: 30000,
+        });
+    }
+
+    return transporter;
 }
-
-const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
-    requireTLS: smtpPort !== 465,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-    connectionTimeout: 20000,
-    greetingTimeout: 20000,
-    socketTimeout: 30000,
-});
 
 function generateEmailHTML(studentName, assignments) {
     const listItems = assignments.map(a => {
@@ -61,9 +69,10 @@ function generateEmailHTML(studentName, assignments) {
 }
 
 export async function sendUserReminder(studentEmail, studentName, assignments) {
+    const activeTransporter = getTransporter();
     const htmlContent = generateEmailHTML(studentName, assignments);
 
-    return transporter.sendMail({
+    return activeTransporter.sendMail({
         from: process.env.EMAIL_FROM || process.env.SMTP_USER,
         to: studentEmail,
         subject: `VOLP Reminder: ${assignments.length} Assignment(s) Due in Next 3 Days`,

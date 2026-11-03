@@ -1,10 +1,21 @@
 import express from "express";
+import jwt from "jsonwebtoken";
 import { login } from "../../api/api.js";
 import { saveUser } from "../../db/saveToDatabase.js";
 import { fetchCourses, fetchAssignments, fetchUser } from "../../db/fetchFromDatabase.js";
 import { singleUserSync } from "../../sync/sync.js";
+import pool from "../../db/database.js";
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "volp-default-session-secret-key-prod";
+
+export function generateToken(user) {
+    return jwt.sign(
+        { id: user.id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: "30d" }
+    );
+}
 
 router.post("/register", async (req, res) => {
     try {
@@ -31,13 +42,33 @@ router.post("/register", async (req, res) => {
         if (auth.status === 200) {
             const saveduser = await saveUser(user);
             user.id = saveduser.id;
-            await singleUserSync(user);
+
+            // Synchronize coursework; if initial sync fails, roll back the newly saved user record
+            try {
+                await singleUserSync(user, auth);
+            } catch (syncErr) {
+                console.error("Initial coursework sync failed during registration. Rolling back user record:", syncErr.message);
+                await pool.query("DELETE FROM users WHERE id = $1", [saveduser.id]);
+                return res.status(502).json({
+                    success: false,
+                    message: `Registration aborted: failed to synchronize coursework from VOLP (${syncErr.message}). Please try again.`
+                });
+            }
+
             const userCourses = await fetchCourses(saveduser.id);
             const userAssignments = await fetchAssignments(saveduser.id);
+            const token = generateToken(saveduser);
+
             return res.status(201).json({
                 success: true,
                 message: "User registered successfully.",
-                user: saveduser,
+                user: {
+                    id: saveduser.id,
+                    email: saveduser.email,
+                    firstName: saveduser.first_name,
+                    lastName: saveduser.last_name,
+                    token
+                },
                 courses: userCourses,
                 assignments: userAssignments
             });
@@ -52,7 +83,7 @@ router.post("/register", async (req, res) => {
         return res.status(400).json({
             success: false,
             message: "Internal server error during registration."
-        })
+        });
     }
 });
 
@@ -81,6 +112,8 @@ router.post("/login", async (req, res) => {
         if (dbUser.password_hash === user.password) {
             const userCourses = await fetchCourses(dbUser.id);
             const userAssignments = await fetchAssignments(dbUser.id);
+            const token = generateToken(dbUser);
+
             return res.status(200).json({
                 success: true,
                 message: "Login successful.",
@@ -88,7 +121,8 @@ router.post("/login", async (req, res) => {
                     id: dbUser.id,
                     email: dbUser.email,
                     firstName: dbUser.first_name,
-                    lastName: dbUser.last_name
+                    lastName: dbUser.last_name,
+                    token
                 },
                 courses: userCourses,
                 assignments: userAssignments
